@@ -1,0 +1,10 @@
+INSERT INTO repairorder VALUES(000004,198365,1133,'11-NOV-2013',null, 'working',null);
+INSERT INTO notes VALUES(01,000004,'New Battery needed');
+INSERT INTO notes VALUES(02,000004,'New Tires needed');
+INSERT INTO procedures VALUES(01,'Battery replacement',null,000004);
+INSERT INTO procedures VALUES(02,'Tires replace X 4',null,000004);
+INSERT INTO lineitem VALUES(01,'Changing Battery - LABOR',30.00,01,000004);
+INSERT INTO lineitem VALUES(02,'Battery - PARTS',40.00,01,000004);
+INSERT INTO lineitem VALUES(01,'Change Tires - LABOR',120.00,02,000004);
+INSERT INTO lineitem VALUES(02,'Change Tires - Tires X4',420.00,02,000004);
+INSERT INTO invoice VALUES(111103,198365,000004,1155, null ,null, null,'estimate',1000320);

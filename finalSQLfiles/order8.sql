@@ -1,0 +1,10 @@
+INSERT INTO repairorder VALUES(000009,234367,1144,'04-DEC-2013',null, 'working',null);
+INSERT INTO notes VALUES(01,000009,'Fix Speakers');
+INSERT INTO notes VALUES(02,000009,'Fix Radio');
+INSERT INTO procedures VALUES(01,'Fix Speakers',null,000009);
+INSERT INTO procedures VALUES(02,'Fix Radio',null,000009);
+INSERT INTO lineitem VALUES(01,'New Speakers - LABOR',190.00,01,000009);
+INSERT INTO lineitem VALUES(02,'New Speakers - PARTS',300.75,01,000009);
+INSERT INTO lineitem VALUES(01,'New Radio - LABOR',190.00,02,000009);
+INSERT INTO lineitem VALUES(02,'New Radio - PARTS',325.99,02,000009);
+INSERT INTO invoice VALUES(111108,234367,000009,1122, null ,null, null,'repair',1000322);

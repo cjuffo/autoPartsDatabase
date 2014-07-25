@@ -1,0 +1,11 @@
+INSERT INTO repairorder VALUES(000007,345666,1133,'17-NOV-2013',null, 'working',null);
+INSERT INTO notes VALUES(01,000007,'New headlights needed');
+INSERT INTO notes VALUES(02,000007,'Oil Change');
+INSERT INTO notes VALUES(03,000007,'Rotate tires-DECLINED');
+INSERT INTO procedures VALUES(01,'New headlights needed',null,000007);
+INSERT INTO procedures VALUES(02,'Oil Change',null,000007);
+INSERT INTO lineitem VALUES(01,'Change Headlights - LABOR',70.50,01,000007);
+INSERT INTO lineitem VALUES(02,'Change Headlights - PARTS',65.75,01,000007);
+INSERT INTO lineitem VALUES(01,'Oil Change - LABOR',30.00,02,000007);
+INSERT INTO lineitem VALUES(02,'Oil Change - PARTS',20.00,02,000007);
+INSERT INTO invoice VALUES(111106,345666,000007,1155, null ,null, null,'repair',1000330);

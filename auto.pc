@@ -1,0 +1,688 @@
+/*	
+	cjuffo
+	FINAL PROJECT
+	auto.pc
+ 
+ */ 
+
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <sqlca.h>
+#include <sqlda.h>
+#include <sqlcpr.h>
+
+
+#define LEN_OF_NAME 20
+#define LEN_OF_PASS 20
+#define LEN_OF_LONG 60
+
+typedef char STRING[LEN_OF_PASS];
+typedef char LONGSTRING[LEN_OF_LONG];
+
+EXEC SQL TYPE STRING IS CHARZ(LEN_OF_PASS) REFERENCE;
+
+/* REMOVED SENSITIVE INFORMATION */
+char *username = "";
+char *password = "";
+
+/* Declare a host structure tag. */
+typedef struct{
+	int empid;
+	STRING position;
+	STRING firstname;
+	STRING lastname;
+	float salary;
+} employee;
+
+typedef struct{
+	int customerid;
+	STRING firstname;
+	STRING lastname;
+	LONGSTRING address;
+} customer;
+
+typedef struct{
+	int vin;
+	int customerid;
+	STRING make;
+	STRING model;
+	int year;
+	int odometerin;
+	int odometerout;
+} vehicle;
+
+typedef struct{
+	int ordernumber;
+	int vin;
+	int empid;
+	STRING origindate;
+	STRING enddate;
+	STRING status;
+	float ordercost;
+} repairorder;
+
+typedef struct{
+	int notenumber;
+	int ordernumber;
+	LONGSTRING description;
+} notes;
+
+typedef struct{
+	int procedurenumber;
+	LONGSTRING description;
+	float totalcost;
+	int ordernumber;
+} procedures;
+
+typedef struct{
+	int itemnumber;
+	LONGSTRING description;
+	float linecost;
+	int procedurenumber;
+	int ordernumber;
+} lineitem;
+
+typedef struct{
+	int invnumber;
+	int vin;
+	int ordernumber;
+	int empid;
+	float balance;
+	STRING dateprinted;
+	STRING datepaid;
+	STRING status;
+	int customerid;
+} invoice;
+
+void sql_error(msg)
+    char *msg;
+{
+
+	char err_msg[128];
+    size_t buf_len, msg_len;
+    EXEC SQL WHENEVER SQLERROR CONTINUE;
+
+	printf("\n%s\n", msg);
+    buf_len = sizeof (err_msg);
+    sqlglm(err_msg, &buf_len, &msg_len);
+    printf("%.*s\n", msg_len, err_msg);
+
+    EXEC SQL ROLLBACK WORK RELEASE;
+    exit(EXIT_FAILURE);
+}
+
+/* **** CREATE NEW CUSTOMER ***** */
+void query1(){
+
+	customer newcust;
+	char word[55];
+	
+	printf("\n\tEnter customer ID: ");
+	scanf ("%d",&newcust.customerid); getchar();
+	printf("\n\tEnter First Name: "); 
+	scanf ("%s",newcust.firstname); getchar();
+	printf("\n\tEnter Last Name: ");
+	scanf ("%s",newcust.lastname); getchar();
+	printf("\n\tEnter Address: ");
+	fgets(word, 54, stdin);
+	word[54]='\0';
+	strcpy(newcust.address, word);
+	
+
+	EXEC SQL set transaction read write;
+	EXEC SQL insert into customer (customerid, firstname, lastname, address)
+			values(:newcust);
+		EXEC SQL commit;
+	printf("\nNew Customer %d Added.\n", newcust.customerid);
+
+};
+
+/* **** DELETE EXISTING EMPLOYEE ***** */
+void query2(){
+		int employeeid;
+		int manager=8686;
+		printf("\nEnter Employee ID you wish to delete: ");
+		scanf("%d",&employeeid); getchar();
+	
+	if(employeeid!=manager){
+		EXEC SQL set transaction read write;
+		EXEC SQL update repairorder 
+				set empid=:manager where empid=:employeeid;
+		EXEC SQL commit;
+	
+		EXEC SQL set transaction read write;
+		EXEC SQL update invoice 
+				set empid=:manager where empid=:employeeid;
+		EXEC SQL commit;
+	
+		EXEC SQL set transaction read write;
+		EXEC SQL delete 
+			from employee where empid = :employeeid;
+		EXEC SQL commit;
+		printf("\nEmployee Deleted.\n");
+	}
+	else
+		printf("\n\t\tCannot Delete Manager/Owner\n\n");
+};
+
+/* **** UPDATE NOTE FOR REPAIR ORDER ***** */
+void query3(){
+
+		int choice;
+		int notenum;
+		int notecount;
+		int reporder;
+		int newnote;
+		char desc[80];
+
+		printf("\nEnter repair order number: ");
+		scanf("%d",&reporder); getchar();
+
+		
+		/* Declare a cursor for the FETCH to get total note count for a given order */
+    		EXEC SQL DECLARE c3 CURSOR FOR
+        	SELECT count(*) from notes where ordernumber=:reporder;
+			
+    		EXEC SQL OPEN c3;
+			
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    		EXEC SQL WHENEVER NOT FOUND DO break;
+
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c3 INTO :notecount;
+				
+				printf("\n\tTotal notes for this order: %d \n", notecount);
+			}
+    		EXEC SQL CLOSE c3;
+			EXEC SQL WHENEVER NOT FOUND CONTINUE;
+			
+			printf("\nEnter note number you wish to edit from 1 to %d: ", notecount);
+			scanf("%d",&notenum); getchar();
+			
+			printf("\n\tEnter New Description: ");
+			fgets(desc, 79, stdin);
+			desc[79]='\0';
+
+			EXEC SQL set transaction read write;
+			EXEC SQL update notes 
+				set description=:desc where notenumber=:notenum and ordernumber=:reporder;
+			EXEC SQL commit;
+			printf("\n\tNote Edited.\n");
+	
+};
+
+
+/* **** REPAIR ORDERS FOR A CERTAIN VEHICLE ***** */
+void query4(){
+
+	repairorder RO;
+	int vinsearch;
+
+	printf("\n\tEnter vin: ");
+	scanf ("%d",&vinsearch); getchar();
+
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c4 CURSOR FOR
+        	SELECT * from repairorder where vin=:vinsearch order by origindate ASC;
+    		EXEC SQL OPEN c4;
+
+		
+		printf("\nRepair Orders for VIN: %d\n\n", vinsearch);
+		printf("OrderNo		Originated		Completed\n");	
+		printf("******		**********		*********\n");	
+
+	/* Array fetch loop - ends when NOT FOUND becomes true. */
+    		EXEC SQL WHENEVER NOT FOUND DO break;	
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c4 INTO :RO;
+	
+			/* Print info */
+			printf("%d		%s	%s\n",RO.ordernumber, RO.origindate, RO.enddate );
+    		}
+		printf("\n");
+    		EXEC SQL CLOSE c4;
+};
+
+void query5(){
+	lineitem LT;
+	int reporder;
+	float total=0.0;
+
+	printf("\n\tEnter Repair Order Number: ");
+	scanf ("%d",&reporder); getchar();
+
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c5 CURSOR FOR
+        	SELECT * from lineitem where ordernumber=(select ordernumber from invoice where ordernumber=:reporder);
+    		EXEC SQL OPEN c5;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nLine Items for Order Number: %d\n\n", reporder);		
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c5 INTO :LT;
+	
+			/* Print info */
+			printf("\tItem Number: %d for procedure number: %d\n\tDescription: %s\n\tPrice: $%0.2f\n\n", LT.itemnumber, LT.procedurenumber, LT.description, LT.linecost );
+			total=LT.linecost+total;
+    		}
+		printf("\nTotal Cost for these items: $%0.2f\n\n", total);
+    		EXEC SQL CLOSE c5;
+
+};
+
+/* **** REPAIR ORDERS COMPLETED BETWEEN JUNE AND DECEMBER 2005 ***** */
+void query6(){
+	repairorder RO;
+	
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c6 CURSOR FOR
+        	SELECT * from repairorder where enddate>='01-JUN-2005' and enddate<='31-DEC-2005' order by ordernumber ASC;
+    		EXEC SQL OPEN c6;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nRepair Orders from June to December 2005: \n\n");
+	
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c6 INTO :RO;
+	
+			/* Print info */
+			printf("%d		%s	%s\n",RO.ordernumber, RO.origindate, RO.enddate );
+    		}
+		printf("\n");
+    		EXEC SQL CLOSE c6;
+};
+
+/* **** SEE LINE ITEMS FOR PARTICULAR PROCEDURE IN A REPAIR ORDER ***** */
+void query7(){
+	lineitem LT;
+	int proc;
+	int order;
+	float total=0.0;
+
+	printf("\n\tEnter Procedure Number: ");
+	scanf ("%d",&proc); getchar();
+	
+	printf("\n\tEnter Order Number: ");
+	scanf ("%d",&order); getchar();
+
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c7 CURSOR FOR
+        	SELECT * from lineitem where procedurenumber=:proc and ordernumber=:order;
+    		EXEC SQL OPEN c7;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nLine Items for Procedure Number: %d\n\n", proc);		
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c7 INTO :LT;
+	
+			/* Print info */
+			printf("\tItem Number: %d for procedure number: %d\n\tDescription: %s\n\tPrice: $%0.2f\n\n", LT.itemnumber, LT.procedurenumber, LT.description, LT.linecost );
+			total=LT.linecost+total;
+    		}
+		printf("\nTotal Cost for these items: $%0.2f\n\n", total);
+    		EXEC SQL CLOSE c7;
+};
+
+/* **** PROCEDURES AND PROCEDURE DESCRIPTION FOR A REPAIR ORDER ***** */
+void query8(){
+	procedures PT;
+	int lastorder=-999999;
+
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c8 CURSOR FOR
+        	SELECT * from procedures order by ordernumber DESC;
+    		EXEC SQL OPEN c8;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nProcedures for each Repair Order: \n\n");		
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c8 INTO :PT;
+				/* Print info */
+				if(PT.ordernumber!=lastorder){
+					printf("\t\tProcedures for Repair Order Number: %d\n\n", PT.ordernumber);
+					lastorder=PT.ordernumber;
+				}
+				printf("\tProcedure number: %d\n\tDescription: %s\n\n", PT.procedurenumber, PT.description );
+    		}
+		printf("\n");
+    		EXEC SQL CLOSE c8;
+
+};
+
+/* **** EMPLOYEE WHO CREATED MORE THAN THE AVERAGE NUMBER OF INVOICES ***** */
+void query9(){
+	employee emp;
+	int employeecount;
+	int invoicecount;
+	float avgperemp;
+	int currentmax=0;
+	int fetchemp=-8888;
+	int currentemp=-8888;
+	int finalcount=0;
+	
+	/* Declare a cursor for the FETCH to get total note count for a given order */
+    		EXEC SQL DECLARE c9_ec CURSOR FOR
+        	SELECT count(DISTINCT empid) from invoice;
+			
+    		EXEC SQL OPEN c9_ec;
+			
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    		EXEC SQL WHENEVER NOT FOUND DO break;
+
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c9_ec INTO :employeecount;
+			}
+    		EXEC SQL CLOSE c9_ec;
+			EXEC SQL WHENEVER NOT FOUND CONTINUE;
+			
+	/* Declare a cursor for the FETCH to get total note count for a given order */
+    		EXEC SQL DECLARE c9_ic CURSOR FOR
+        	SELECT count(*) from invoice;
+			
+    		EXEC SQL OPEN c9_ic;
+			
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    		EXEC SQL WHENEVER NOT FOUND DO break;
+
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c9_ic INTO :invoicecount;
+			}
+    		EXEC SQL CLOSE c9_ic;
+			EXEC SQL WHENEVER NOT FOUND CONTINUE;
+			
+			avgperemp= invoicecount/employeecount;
+			
+			printf("\nTotal number of Invoices: %d\nDistinct employee IDs: %d\nAverage Per Employee: %0.2f\n", invoicecount, employeecount, avgperemp);
+
+	/*MISSING: NEEDS TO BE FIXED */
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c9 CURSOR FOR
+        	select count(*), empid from invoice group by empid;
+    		EXEC SQL OPEN c9;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nEmployee Name with over the average number of invoices: \n\n");		
+    		for (;;)
+    		{
+				
+        		EXEC SQL FETCH c9 INTO :currentmax, :fetchemp;
+				if(currentmax>avgperemp){
+					currentemp=fetchemp;
+					finalcount=currentmax;
+				}
+				
+    		}
+    		EXEC SQL CLOSE c9;
+			
+			/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c99 CURSOR FOR
+        	SELECT * from employee where empid=:currentemp;
+    		EXEC SQL OPEN c99;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;	
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c99 INTO :emp;
+				/* Print info */
+			
+				printf("\tEmployee First Name: %s\n\tEmployee Last Name: %s\n\tNumber of Invoices: %d\n\n", emp.firstname, emp.lastname, finalcount );
+    		}
+		printf("\n");
+    		EXEC SQL CLOSE c99;
+			
+			
+			
+};
+
+/* **** BALANCE AND VEHICLE INFORMATION FOR A SPECIFIC INVOICE ***** */
+void query10(){
+	invoice IV;
+	vehicle VT;
+	int inv;
+	int vintemp;
+
+
+	printf("\n\tEnter Invoice Number: ");
+	scanf ("%d",&inv); getchar();
+	
+
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c10 CURSOR FOR
+        	SELECT * from invoice where invnumber=:inv;
+    		EXEC SQL OPEN c10;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nBalance and Vehicle Info for Invoice Number: %d\n\n", inv);		
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c10 INTO :IV;
+	
+			/* Print info */
+			printf("\tBalance Left: $%0.2f\n", IV.balance);
+			vintemp=IV.vin;
+    		}
+    		EXEC SQL CLOSE c10;
+			
+		/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c10_2 CURSOR FOR
+        	SELECT * from vehicle where vin=:vintemp;
+    		EXEC SQL OPEN c10_2;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;		
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c10_2 INTO :VT;
+				if(VT.odometerout!=0)
+					printf("\tYear: %d\n\tMake: %s\n\tModel: %s\n\tOdometer In: %d\n\tOdometer Out: %d\n\n", VT.year, VT.make, VT.model, VT.odometerin, VT.odometerout);
+				else
+					printf("\tYear: %d\n\tMake: %s\n\tModel: %s\n\tOdometer In: %d\n\tOdometer Out: Still in Shop\n\n", VT.year, VT.make, VT.model, VT.odometerin);
+    		}
+    		EXEC SQL CLOSE c10_2;
+};
+
+/* **** UPDATE INVOICE BALANCE ***** */
+void updatebalance(int order){
+
+	repairorder LT;
+	float total=0.0;
+	int temp = order;
+ 
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c33 CURSOR FOR
+        	SELECT * from repairorder where ordernumber=:temp;
+    		EXEC SQL OPEN c33;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nUpdating Cost for Invoice for Repair Order %d\n\n", temp);
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c33 INTO :LT;
+        		total= LT.ordercost;
+    		}
+			
+			EXEC SQL CLOSE c33;
+			EXEC SQL WHENEVER NOT FOUND CONTINUE;
+			
+            EXEC SQL set transaction read write;
+			EXEC SQL update invoice 
+				set balance=:total where ordernumber=:temp and status!='paid';
+			EXEC SQL commit;
+};
+
+/* **** UPDATE REPAIR ORDER COSTS BY CALCULATING PROCEDURES COST TOTAL ***** */
+void updateREPCosts(int order){
+
+	procedures LT;
+	float total=0.0;
+	int temp = order;
+ 
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c20 CURSOR FOR
+        	SELECT * from procedures where ordernumber=:temp;
+    		EXEC SQL OPEN c20;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nUpdating Cost for  Repair Order %d\n\n", temp);
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c20 INTO :LT;
+        		total= total+LT.totalcost;
+    		}
+			EXEC SQL CLOSE c20;
+			EXEC SQL WHENEVER NOT FOUND CONTINUE;
+			
+            		EXEC SQL set transaction read write;
+			EXEC SQL update repairorder 
+				set ordercost=:total where ordernumber=:temp;
+			EXEC SQL commit;
+			
+		updatebalance(temp);
+};
+
+/* **** UPDARE PROCEDURE COSTS BY CALCULATING LINE ITEMS COST TOTAL ***** */
+void updateProceCosts(){
+
+	lineitem LT;
+	int proc;
+	int order;
+	float total=0.0;
+
+	printf("\n\tEnter Procedure Number: ");
+	scanf ("%d",&proc); getchar();
+	
+	printf("\n\tEnter Order Number: ");
+	scanf ("%d",&order); getchar();
+ 
+	/* Declare a cursor for the FETCH. */
+    		EXEC SQL DECLARE c22 CURSOR FOR
+        	SELECT * from lineitem where procedurenumber=:proc and ordernumber=:order;
+    		EXEC SQL OPEN c22;
+
+		/* Array fetch loop - ends when NOT FOUND becomes true. */
+    	EXEC SQL WHENEVER NOT FOUND DO break;
+		printf("\nUpdating Cost for Procedure %d in Repair Order %d\n\n", proc, order);
+    		for (;;)
+    		{
+        		EXEC SQL FETCH c22 INTO :LT;
+        		total= total+LT.linecost;
+    		}
+			EXEC SQL CLOSE c22;
+			EXEC SQL WHENEVER NOT FOUND CONTINUE;
+			
+            		EXEC SQL set transaction read write;
+			EXEC SQL update procedures 
+				set totalcost=:total where procedurenumber=:proc and ordernumber=:order;
+			EXEC SQL commit;
+
+			updateREPCosts(order);      
+};
+
+void main()
+{
+	char selection=-678;  
+
+/* Connect to ORACLE. */
+    EXEC SQL WHENEVER SQLERROR DO sql_error("Connect error:");
+
+    EXEC SQL CONNECT :username IDENTIFIED BY :password;
+    printf("\nConnected to ORACLE as user: %s\n", username);
+
+
+    EXEC SQL WHENEVER SQLERROR DO sql_error("Oracle error:");
+
+
+	printf("\n\n********************************************************\n");
+	printf("\t\tPlease Choose Query: \n\n");
+	printf("1) Insert new customer into the database\n");
+	printf("2) Delete existing employee from the database\n");
+	printf("3) Update the description of an existing repair order note\n");
+	printf("4) List all repair orders belonging to a certain vehicle\n");
+	printf("5) List details of the line items of a given repair order\n");
+	printf("6) List details of repair orders completed between Jun2005 and Dec2005\n");
+	printf("7) List details of the line items of a given procedure\n");
+	printf("8) List total number of procedures required by each repair order in desc. order and with description\n");
+	printf("9) List the name of the employee who recorded more than the average invoice\n");
+	printf("0) For particular invoice, list odometer miles, payment information and vehicle information\n");
+	printf("U) Upgrade Costs\n");
+	printf("EXIT) Enter E to exit\n");
+
+
+while(selection!='E' || selection!='e')
+{
+
+	if(selection!='\n')   
+		printf("CHOOSE MENU CHOICE[Type M to see menu again]:  ");
+	selection=getchar();
+	getchar();
+
+	if(selection=='E'|| selection=='e')
+		break;
+	else if(selection=='M'|| selection=='m')
+	{
+		printf("\n\n********************************************************\n");
+		printf("\t\tPlease Choose Query: \n\n");
+		printf("1) Insert new customer into the database\n");
+		printf("2) Delete existing employee from the database\n");
+		printf("3) Update the description of an existing repair order note\n");
+		printf("4) List all repair orders belonging to a certain vehicle\n");
+		printf("5) List details of the line items of a given repair order\n");
+		printf("6) List details of repair orders completed between Jun2005 and Dec2005\n");
+		printf("7) List details of the line items of a given procedure\n");
+		printf("8) List total number of procedures required by each repair order in desc. order and with description\n");
+		printf("9) List the name of the employee who recorded more than the average invoice\n");
+		printf("0) For particular invoice, list odometer miles, payment information and vehicle information\n");
+		printf("U) Upgrade Costs\n");
+		printf("EXIT) Enter E to exit\n");
+	}	
+	else if(selection=='1')
+		query1();
+	else if(selection=='2')
+		query2();
+	else if(selection=='3')
+		query3();
+	else if(selection=='4')
+		query4();
+	else if(selection=='5')
+		query5();
+	else if(selection=='6')
+		query6();
+	else if(selection=='7')
+		query7();
+	else if(selection=='8')
+		query8();
+	else if(selection=='9')
+		query9();
+	else if(selection=='0')
+		query10();
+	else if(selection=='U' || selection=='u')
+		updateProceCosts();
+	else
+		printf("\nPLEASE SELECT VALUES FROM 0-9, E , U or M\n");
+}
+	printf("\n\n\t\tExiting Program -- cjuffo\n\n");
+	
+/* Disconnect from the database. */
+    EXEC SQL COMMIT WORK RELEASE;
+    exit(EXIT_SUCCESS);
+}
+
